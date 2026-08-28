@@ -19,8 +19,7 @@ ENV PATH=/opt/conda/envs/${PLUGIN_NAME}/bin:$PATH \
     LC_ALL=C.UTF-8 LANG=C.UTF-8 \
     MPLBACKEND=agg \
     UNIFRAC_USE_GPU=N \
-    HOME=/home/${QIIME2_USER} \
-    XDG_CONFIG_HOME=/home/${QIIME2_USER}
+    HOME=/root
 
 WORKDIR /home/${QIIME2_USER}
 COPY environment.yml .
@@ -39,6 +38,9 @@ RUN conda update -qy conda \
     && chmod -R a+rwX "/opt/conda/envs/${PLUGIN_NAME}"
 
 USER ${QIIME2_USER}
+
+ENV HOME=/home/${QIIME2_USER} \
+    XDG_CONFIG_HOME=/home/${QIIME2_USER}
 
 COPY --chown=${QIIME2_UID}:${QIIME2_GID} . ./plugin
 
