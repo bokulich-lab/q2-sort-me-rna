@@ -1,6 +1,7 @@
 FROM continuumio/miniconda3:latest AS base
 
 USER root
+
 ARG ENVIRONMENT
 ARG PLUGIN_NAME
 ARG QIIME2_USER=qiime2
