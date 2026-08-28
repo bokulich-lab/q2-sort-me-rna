@@ -1,196 +1,123 @@
 # ----------------------------------------------------------------------------
-# Copyright (c) 2016-2023, QIIME 2 development team.
+# Copyright (c) 2016-2026, QIIME 2 development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
 # The full license is in the file LICENSE, distributed with this software.
 # ----------------------------------------------------------------------------
-import re
+
+from pathlib import Path
 import shutil
 import subprocess
-import os
 import tempfile
 import unittest
 
+from qiime2 import Artifact
+from qiime2.plugin.testing import TestPluginBase
 
-class TestSortRNA(unittest.TestCase):
+
+@unittest.skipUnless(
+    shutil.which("sortmerna"),
+    "SortMeRNA is not installed; skipping end-to-end tests.",
+)
+class SortMeRNAEndToEndTests(TestPluginBase):
+    package = "q2_sort_me_rna.tests"
 
     def setUp(self):
-        self.q2smr_input_dir = tempfile.mkdtemp()
-        self._copy_files('./q2_sort_me_rna/tests/assets',
-                         self.q2smr_input_dir)
-
-        self.q2smr_output_dir = tempfile.mkdtemp()
-        self.q2smr_output_artifacts_dir = \
-            f'{self.q2smr_output_dir}/qiime-output'
+        super().setUp()
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.workdir = Path(self.temporary_directory.name)
+        self.output_dir = self.workdir / "qiime-output"
 
     def tearDown(self):
-        shutil.rmtree(self.q2smr_output_dir)
+        self.temporary_directory.cleanup()
+        super().tearDown()
 
-    def test_sort_rna_end_to_end(self):
+    def test_align_sequences(self):
         command = [
-            'qiime', 'sort-me-rna', 'align-sequences',
-            '--i-ref', f'{self.q2smr_input_dir}/rrna_references.qza',
-            '--i-reads', f'{self.q2smr_input_dir}/paired_raw_sequence.qza',
-            '--p-workdir', self.q2smr_output_dir,
-            '--output-dir', self.q2smr_output_artifacts_dir
+            "qiime",
+            "sort-me-rna",
+            "align-sequences",
+            "--i-references",
+            self.get_data_path("rrna_references.qza"),
+            "--i-reads",
+            self.get_data_path("paired_raw_sequence.qza"),
+            "--p-num-alignments",
+            "1",
+            "--p-no-best",
+            "--p-score-split",
+            "--p-max-read-len",
+            "30000",
+            "--output-dir",
+            str(self.output_dir),
         ]
-
         subprocess.run(command, check=True)
 
-        expected_artifacts = [
-            "blast_aligned_seq.qza",
-            "fastx_aligned_seq.qza",
-            "sam_aligned_seq.qza"
-        ]
+        self._assert_artifact(
+            "blast_aligned_seq.qza", "FeatureData[BLAST6]"
+        )
+        self._assert_artifact(
+            "fastx_aligned_seq.qza", "SampleData[SequencesWithQuality]"
+        )
+        self._assert_artifact(
+            "alignment_map.qza", "SampleData[AlignmentMap]"
+        )
 
-        files = os.listdir(self.q2smr_output_artifacts_dir)
-        for artifact in expected_artifacts:
-            self.assertIn(artifact, files, "Expected file is not present")
+    def test_sortmerna_major_version(self):
+        completed = subprocess.run(
+            ["sortmerna", "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        version_output = completed.stdout + completed.stderr
+        self.assertRegex(version_output, r"SortMeRNA version 7\.")
 
-        expected_meta_data = {
-            "blast_aligned_seq.qza": {
-                'Type': 'FeatureData[BLAST6]',
-                'format': 'BLAST6DirectoryFormat',
-            },
-            "fastx_aligned_seq.qza": {
-                'Type': 'SampleData[SequencesWithQuality]',
-                'format': 'SingleLanePerSampleSingleEndFastqDirFmt',
-            },
-            "sam_aligned_seq.qza": {
-                'Type': 'SampleData[SequenceAlignmentMap]',
-                'format': 'SAMDirFmt',
-            }
-        }
-
-        self._validate_artifact_types(self.q2smr_output_artifacts_dir,
-                                      expected_meta_data)
-
-    def test_otu_mapping_end_to_end(self):
+    def test_otu_mapping(self):
         command = [
-            'qiime', 'sort-me-rna', 'otu-mapping',
-            '--i-ref', f'{self.q2smr_input_dir}/rrna_references.qza',
-            '--i-reads', f'{self.q2smr_input_dir}/raw_sequence.qza',
-            '--p-id', '0.12',
-            '--p-coverage', '0.12',
-            '--p-workdir', self.q2smr_output_dir,
-            '--output-dir', self.q2smr_output_artifacts_dir
+            "qiime",
+            "sort-me-rna",
+            "otu-mapping",
+            "--i-references",
+            self.get_data_path("rrna_references.qza"),
+            "--i-reads",
+            self.get_data_path("raw_sequence.qza"),
+            "--p-id",
+            "0.12",
+            "--p-coverage",
+            "0.12",
+            "--output-dir",
+            str(self.output_dir),
         ]
-
         subprocess.run(command, check=True)
 
-        expected_artifacts = [
-            "blast_aligned_seq.qza",
-            "fastx_aligned_seq.qza",
-            "sam_aligned_seq.qza",
-            "otu_mapping.qza",
-        ]
+        self._assert_artifact("otu_mapping.qza", "FeatureTable[Frequency]")
 
-        for artifact in expected_artifacts:
-            files = os.listdir(self.q2smr_output_artifacts_dir)
-            self.assertIn(artifact, files, "Expected file is not present")
-
-        expected_meta_data = {
-            "blast_aligned_seq.qza": {
-                'Type': 'FeatureData[BLAST6]',
-                'format': 'BLAST6DirectoryFormat',
-            },
-            "fastx_aligned_seq.qza": {
-                'Type': 'SampleData[SequencesWithQuality]',
-                'format': 'SingleLanePerSampleSingleEndFastqDirFmt',
-            },
-            "sam_aligned_seq.qza": {
-                'Type': 'SampleData[SequenceAlignmentMap]',
-                'format': 'SAMDirFmt',
-            },
-            "otu_mapping.qza": {
-                'Type': 'FeatureTable[Frequency]',
-                'format': 'BIOMV210DirFmt',
-            }
-        }
-
-        self._validate_artifact_types(self.q2smr_output_artifacts_dir,
-                                      expected_meta_data)
-
-    def test_denovo_otu_mapping_end_to_end(self):
+    def test_denovo_otu_mapping(self):
         command = [
-            'qiime', 'sort-me-rna', 'denovo-otu-mapping',
-            '--i-ref', f'{self.q2smr_input_dir}/rrna_references.qza',
-            '--i-reads', f'{self.q2smr_input_dir}/raw_sequence.qza',
-            '--p-id', '0.7',
-            '--p-coverage', '0.7',
-            '--p-workdir', self.q2smr_output_dir,
-            '--output-dir', self.q2smr_output_artifacts_dir
+            "qiime",
+            "sort-me-rna",
+            "denovo-otu-mapping",
+            "--i-references",
+            self.get_data_path("rrna_references.qza"),
+            "--i-reads",
+            self.get_data_path("raw_sequence.qza"),
+            "--p-id",
+            "0.7",
+            "--p-coverage",
+            "0.7",
+            "--output-dir",
+            str(self.output_dir),
         ]
-
         subprocess.run(command, check=True)
 
-        expected_artifacts = [
-            "blast_aligned_seq.qza",
-            "fastx_aligned_seq.qza",
-            "sam_aligned_seq.qza",
-            "otu_mapping.qza",
+        self._assert_artifact(
             "denovo_aligned_seq.qza",
-        ]
+            "SampleData[SequencesWithQuality]",
+        )
 
-        for artifact in expected_artifacts:
-            files = os.listdir(self.q2smr_output_artifacts_dir)
-            self.assertIn(artifact, files, "Expected file is not present")
-
-        expected_meta_data = {
-            "blast_aligned_seq.qza": {
-                'Type': 'FeatureData[BLAST6]',
-                'format': 'BLAST6DirectoryFormat',
-            },
-            "fastx_aligned_seq.qza": {
-                'Type': 'SampleData[SequencesWithQuality]',
-                'format': 'SingleLanePerSampleSingleEndFastqDirFmt',
-            },
-            "sam_aligned_seq.qza": {
-                'Type': 'SampleData[SequenceAlignmentMap]',
-                'format': 'SAMDirFmt',
-            },
-            "otu_mapping.qza": {
-                'Type': 'FeatureTable[Frequency]',
-                'format': 'BIOMV210DirFmt',
-            },
-            "denovo_aligned_seq.qza": {
-                'Type': 'SampleData[SequencesWithQuality]',
-                'format': 'SingleLanePerSampleSingleEndFastqDirFmt',
-            },
-        }
-
-        self._validate_artifact_types(self.q2smr_output_artifacts_dir,
-                                      expected_meta_data)
-
-    def _copy_files(self, source_directory, destination_directory):
-        for filename in os.listdir(source_directory):
-            source = os.path.join(source_directory, filename)
-            destination = os.path.join(destination_directory, filename)
-            if os.path.isfile(source):
-                shutil.copy2(source, destination)
-
-    def _validate_artifact_types(self, artifacts_dir, expected_meta_data):
-        for filename in expected_meta_data.keys():
-            file = os.path.join(artifacts_dir, filename)
-            self._validate_artifact_type(file, expected_meta_data[filename])
-
-    def _validate_artifact_type(self, file, expected_meta_data):
-        qiime_validate_cmd = ['qiime', 'tools', 'validate', file]
-        subprocess.run(qiime_validate_cmd, check=True,
-                       stdout=subprocess.PIPE, text=True)
-
-        qiime_peek_cmd = ['qiime', 'tools', 'peek', file]
-        peek_result = subprocess.run(qiime_peek_cmd, check=True,
-                                     stdout=subprocess.PIPE, text=True)
-
-        key_value_pairs = re.findall(r'(\S+):\s+(\S+)', peek_result.stdout)
-        result_dict = dict(key_value_pairs)
-
-        err_msg = "Artifact metadata does not match the expected values"
-        for key, value in expected_meta_data.items():
-            self.assertEqual(result_dict[key], value, err_msg)
-
-
-if __name__ == '__main__':
-    unittest.main()
+    def _assert_artifact(self, filename, expected_type):
+        artifact_path = self.output_dir / filename
+        self.assertTrue(artifact_path.exists())
+        artifact = Artifact.load(artifact_path)
+        self.assertEqual(str(artifact.type), expected_type)
