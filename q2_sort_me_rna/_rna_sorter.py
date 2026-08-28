@@ -60,9 +60,7 @@ def sort_rna(
     max_pos: int = None,
 ):
     arguments = locals().copy()
-    with tempfile.TemporaryDirectory(
-        prefix="q2-sort-me-rna-"
-    ) as temporary_workdir:
+    with tempfile.TemporaryDirectory(prefix="q2-sort-me-rna-") as temporary_workdir:
         arguments["workdir"] = temporary_workdir
         return _run_sort_rna(arguments)
 
@@ -111,8 +109,7 @@ def _run_sort_rna(arguments):
             raise RuntimeError(message) from error
         except OSError as error:
             raise RuntimeError(
-                f"Unable to execute SortMeRNA for sample {sample_id!r}: "
-                f"{error}"
+                f"Unable to execute SortMeRNA for sample {sample_id!r}: " f"{error}"
             ) from error
 
         output_dir = sample_workdir / "out"
@@ -175,8 +172,7 @@ def _merge_directory_formats(formats, format_type):
             destination = destination_dir / input_path.name
             if destination.exists():
                 raise ValueError(
-                    f"Cannot merge duplicate per-sample output: "
-                    f"{input_path.name}"
+                    f"Cannot merge duplicate per-sample output: " f"{input_path.name}"
                 )
             shutil.copyfile(input_path, destination)
     return merged
@@ -234,13 +230,9 @@ def _collect_outputs(output_dir, sample_id):
             key = "denovo" if "_denovo." in name else "fastx"
             outputs[key] = _construct_fastx_fmt(output_file, sample_id)
         elif extension == ".sam":
-            outputs["alignment_map"] = _construct_bam_fmt(
-                output_file, sample_id
-            )
+            outputs["alignment_map"] = _construct_bam_fmt(output_file, sample_id)
         elif name == "otu_map.txt":
-            outputs["otu_map"] = _construct_otu_mapping(
-                output_file, sample_id
-            )
+            outputs["otu_map"] = _construct_otu_mapping(output_file, sample_id)
 
     return outputs
 
@@ -262,9 +254,7 @@ def _construct_fastx_fmt(input_path, sample_id):
     input_path = Path(input_path)
     extension = _effective_extension(input_path.name)
     if not _is_fastq(extension):
-        raise ValueError(
-            f"Unsupported aligned sequence file type: {extension}"
-        )
+        raise ValueError(f"Unsupported aligned sequence file type: {extension}")
 
     if input_path.suffix != ".gz":
         compressed_path = input_path.with_suffix(f"{input_path.suffix}.gz")
@@ -272,9 +262,7 @@ def _construct_fastx_fmt(input_path, sample_id):
         input_path = compressed_path
 
     fastx_fmt = CasavaOneEightSingleLanePerSampleDirFmt()
-    destination = (
-        Path(str(fastx_fmt)) / f"{sample_id}_0_L001_R1_001.fastq.gz"
-    )
+    destination = Path(str(fastx_fmt)) / f"{sample_id}_0_L001_R1_001.fastq.gz"
     shutil.copyfile(input_path, destination)
     return fastx_fmt
 
@@ -319,9 +307,7 @@ def _construct_otu_mapping(input_path, sample_id):
         for line_number, line in enumerate(fh, start=1):
             fields = line.rstrip("\r\n").split("\t")
             if not fields or not fields[0]:
-                raise ValueError(
-                    f"Invalid OTU map record at line {line_number}."
-                )
+                raise ValueError(f"Invalid OTU map record at line {line_number}.")
             counts[fields[0]] = len(fields) - 1
 
     mapping = pd.DataFrame([counts], index=[sample_id], dtype=int)
@@ -367,17 +353,13 @@ def _is_fasta(extension):
 def _get_read_sets(reads_artifact):
     manifest = reads_artifact.manifest
     if manifest.empty:
-        raise ValueError(
-            "The reads artifact does not contain a gzipped FASTQ file."
-        )
+        raise ValueError("The reads artifact does not contain a gzipped FASTQ file.")
 
     read_sets = []
     layouts = set()
     for sample_id, row in manifest.sort_index().iterrows():
         if pd.isna(row["forward"]):
-            raise ValueError(
-                f"Sample {sample_id!r} does not contain a forward read."
-            )
+            raise ValueError(f"Sample {sample_id!r} does not contain a forward read.")
 
         forward_read = Path(row["forward"])
         if pd.isna(row["reverse"]):

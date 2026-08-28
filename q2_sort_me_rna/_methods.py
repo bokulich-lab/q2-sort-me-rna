@@ -88,9 +88,7 @@ def otu_mapping(
     pd.DataFrame,
 ):
     arguments = locals()
-    return sort_rna(
-        blast="1", fastx=True, sam=True, sq=True, otu_map=True, **arguments
-    )
+    return sort_rna(blast="1", fastx=True, sam=True, sq=True, otu_map=True, **arguments)
 
 
 def denovo_otu_mapping(

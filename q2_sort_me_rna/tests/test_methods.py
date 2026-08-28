@@ -37,15 +37,15 @@ class SortMeRNAMethodTests(TestPluginBase):
 
     def setUp(self):
         super().setUp()
-        self.reference = Artifact.load(
-            self.get_data_path("rrna_references.qza")
-        ).view(DNAFASTAFormat)
+        self.reference = Artifact.load(self.get_data_path("rrna_references.qza")).view(
+            DNAFASTAFormat
+        )
         self.reference_artifact = Artifact.load(
             self.get_data_path("rrna_references.qza")
         )
-        self.single_reads = Artifact.load(
-            self.get_data_path("raw_sequence.qza")
-        ).view(CasavaOneEightSingleLanePerSampleDirFmt)
+        self.single_reads = Artifact.load(self.get_data_path("raw_sequence.qza")).view(
+            CasavaOneEightSingleLanePerSampleDirFmt
+        )
         self.single_reads_artifact = Artifact.load(
             self.get_data_path("raw_sequence.qza")
         )
@@ -53,8 +53,7 @@ class SortMeRNAMethodTests(TestPluginBase):
         source_read = next(Path(str(self.single_reads)).glob("*.fastq.gz"))
         for sample_id in ("raw", "second"):
             destination = (
-                Path(str(self.multi_reads))
-                / f"{sample_id}_S1_L001_R1_001.fastq.gz"
+                Path(str(self.multi_reads)) / f"{sample_id}_S1_L001_R1_001.fastq.gz"
             )
             shutil.copyfile(source_read, destination)
         self.paired_reads = Artifact.load(
@@ -69,16 +68,12 @@ class SortMeRNAMethodTests(TestPluginBase):
                     / f"{sample_id}_S1_L001_{direction}_001.fastq.gz"
                 )
                 shutil.copyfile(source_read, destination)
-        self.mock_output_dir = Path(
-            self.get_data_path("sortmerna-output")
-        )
+        self.mock_output_dir = Path(self.get_data_path("sortmerna-output"))
 
     def _mock_sortmerna(self, command, **kwargs):
         if command[0] == "samtools":
             destination = Path(command[command.index("-o") + 1])
-            encoded_bam = (
-                self.mock_output_dir / "aligned.bam.b64"
-            ).read_bytes()
+            encoded_bam = (self.mock_output_dir / "aligned.bam.b64").read_bytes()
             destination.write_bytes(base64.b64decode(encoded_bam))
             return subprocess.CompletedProcess(command, returncode=0)
 
@@ -87,9 +82,7 @@ class SortMeRNAMethodTests(TestPluginBase):
         output_dir.mkdir(parents=True)
 
         for filename in ("aligned.blast", "aligned.fastq", "aligned.sam"):
-            shutil.copyfile(
-                self.mock_output_dir / filename, output_dir / filename
-            )
+            shutil.copyfile(self.mock_output_dir / filename, output_dir / filename)
 
         if "--otu_map" in command:
             shutil.copyfile(
@@ -120,15 +113,12 @@ class SortMeRNAMethodTests(TestPluginBase):
             )
 
         self.assertIsInstance(observed[0], BLAST6Format)
-        self.assertIsInstance(
-            observed[1], CasavaOneEightSingleLanePerSampleDirFmt
-        )
+        self.assertIsInstance(observed[1], CasavaOneEightSingleLanePerSampleDirFmt)
         self.assertIsInstance(observed[2], BAMDirFmt)
         observed[2].validate(level="max")
 
         commands = [call.args[0] for call in mock_run.call_args_list]
-        command = next(command for command in commands
-                       if command[0] == "sortmerna")
+        command = next(command for command in commands if command[0] == "sortmerna")
         self.assertEqual(command[0], "sortmerna")
         self.assertIn("--ref", command)
         self.assertIn("--reads", command)
@@ -139,12 +129,8 @@ class SortMeRNAMethodTests(TestPluginBase):
         self.assertIn("--score_split", command)
         self.assertNotIn("True", command)
         self.assertNotIn("--best", command)
-        self.assertEqual(
-            command[command.index("--num_alignments") + 1], "2"
-        )
-        self.assertEqual(
-            command[command.index("--max_read_len") + 1], "40000"
-        )
+        self.assertEqual(command[command.index("--num_alignments") + 1], "2")
+        self.assertEqual(command[command.index("--max_read_len") + 1], "40000")
         self.assertEqual(command[command.index("--threads") + 1], "2")
         temporary_workdir = Path(command[command.index("--workdir") + 1])
         self.assertFalse(temporary_workdir.exists())
@@ -190,9 +176,7 @@ class SortMeRNAMethodTests(TestPluginBase):
         )
         expected = pd.DataFrame(
             {"ref1": [2, 2]},
-            index=pd.Index(
-                ["raw", "second"], name="sample-id"
-            ),
+            index=pd.Index(["raw", "second"], name="sample-id"),
         ).sort_index()
         pdt.assert_frame_equal(observed[3].sort_index(), expected)
 
@@ -237,9 +221,7 @@ class SortMeRNAMethodTests(TestPluginBase):
 
         expected = pd.DataFrame(
             {"ref1": [2, 0]},
-            index=pd.Index(
-                ["raw", "second"], name="sample-id"
-            ),
+            index=pd.Index(["raw", "second"], name="sample-id"),
         ).sort_index()
         pdt.assert_frame_equal(observed[3].sort_index(), expected)
 
@@ -248,14 +230,10 @@ class SortMeRNAMethodTests(TestPluginBase):
             "q2_sort_me_rna._rna_sorter.run_command",
             side_effect=self._mock_sortmerna,
         ):
-            observed = denovo_otu_mapping(
-                self.reference, self.single_reads
-            )
+            observed = denovo_otu_mapping(self.reference, self.single_reads)
 
         self.assertEqual(len(observed), 5)
-        self.assertIsInstance(
-            observed[4], CasavaOneEightSingleLanePerSampleDirFmt
-        )
+        self.assertIsInstance(observed[4], CasavaOneEightSingleLanePerSampleDirFmt)
 
     def test_sortmerna_failure_is_actionable(self):
         error = subprocess.CalledProcessError(
@@ -269,8 +247,7 @@ class SortMeRNAMethodTests(TestPluginBase):
         ):
             with self.assertRaisesRegex(
                 RuntimeError,
-                "SortMeRNA failed with exit code 2 for sample "
-                "'raw': invalid option",
+                "SortMeRNA failed with exit code 2 for sample " "'raw': invalid option",
             ):
                 align_sequences(self.reference, self.single_reads)
 
@@ -348,9 +325,7 @@ class SortMeRNAMethodTests(TestPluginBase):
                 "threads": 1,
             }
         )
-        self.assertEqual(
-            observed, ["--match", "2", "--threads", "1"]
-        )
+        self.assertEqual(observed, ["--match", "2", "--threads", "1"])
 
     def test_parameter_parsing_rejects_two_custom_alignment_limits(self):
         with self.assertRaisesRegex(
@@ -442,9 +417,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             ):
                 self.assertNotIn(name, action_parameters)
 
-        otu_parameters = self.plugin.methods[
-            "otu_mapping"
-        ].signature.parameters
+        otu_parameters = self.plugin.methods["otu_mapping"].signature.parameters
         self.assertNotIn("no_best", otu_parameters)
 
     def test_method_defaults_match_sortmerna(self):
@@ -491,9 +464,7 @@ class SortMeRNAMethodTests(TestPluginBase):
                 expected.pop("no_best")
 
             method_parameters = inspect.signature(method).parameters
-            action_parameters = self.plugin.methods[
-                action_name
-            ].signature.parameters
+            action_parameters = self.plugin.methods[action_name].signature.parameters
             for name, value in expected.items():
                 self.assertEqual(method_parameters[name].default, value)
                 self.assertEqual(action_parameters[name].default, value)
@@ -512,8 +483,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             )
 
         commands = [call.args[0] for call in mock_run.call_args_list]
-        command = next(command for command in commands
-                       if command[0] == "sortmerna")
+        command = next(command for command in commands if command[0] == "sortmerna")
         self.assertEqual(command[command.index("--threads") + 1], "1")
         for option in ("--num_alignments", "--min_lis"):
             self.assertNotIn(option, command)
@@ -525,9 +495,8 @@ class SortMeRNAMethodTests(TestPluginBase):
         ):
             self.assertEqual(command[command.index(option) + 1], value)
 
-        self.assertEqual(str(observed.blast_aligned_seq.type),
-                         "FeatureData[BLAST6]")
-        self.assertEqual(str(observed.fastx_aligned_seq.type),
-                         "SampleData[SequencesWithQuality]")
-        self.assertEqual(str(observed.alignment_map.type),
-                         "SampleData[AlignmentMap]")
+        self.assertEqual(str(observed.blast_aligned_seq.type), "FeatureData[BLAST6]")
+        self.assertEqual(
+            str(observed.fastx_aligned_seq.type), "SampleData[SequencesWithQuality]"
+        )
+        self.assertEqual(str(observed.alignment_map.type), "SampleData[AlignmentMap]")

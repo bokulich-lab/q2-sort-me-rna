@@ -18,7 +18,6 @@ from q2_types.feature_data import DNAFASTAFormat
 
 from q2_sort_me_rna import __version__
 
-
 SORTMERNA_DATABASE_RELEASE = "7.0.0"
 _RELEASE_BASE_URL = (
     "https://github.com/sortmerna/sortmerna/releases/download/"
@@ -35,31 +34,19 @@ class _DatabaseAsset:
 _DATABASE_ASSETS = {
     "fast": _DatabaseAsset(
         filename="smr_v4.3_fast_db.fasta.gz",
-        sha256=(
-            "3ad47d6a9296e891f6165ec8152eb8e3"
-            "8c7ed9f37a2b94e06f71b67ec694487b"
-        ),
+        sha256=("3ad47d6a9296e891f6165ec8152eb8e3" "8c7ed9f37a2b94e06f71b67ec694487b"),
     ),
     "default": _DatabaseAsset(
         filename="smr_v4.3_default_db.fasta.gz",
-        sha256=(
-            "abd7e0ffdf4710800a954af595811049"
-            "056705bac500999ca5d8f53b1c256752"
-        ),
+        sha256=("abd7e0ffdf4710800a954af595811049" "056705bac500999ca5d8f53b1c256752"),
     ),
     "sensitive": _DatabaseAsset(
         filename="smr_v4.3_sensitive_db.fasta.gz",
-        sha256=(
-            "b9efe5fd8cf2b631c19f3b6ddf7b0e5"
-            "c68351ed3409b9ce6f3c156052a1a830f"
-        ),
+        sha256=("b9efe5fd8cf2b631c19f3b6ddf7b0e5" "c68351ed3409b9ce6f3c156052a1a830f"),
     ),
     "sensitive-rfam-seeds": _DatabaseAsset(
         filename="smr_v4.3_sensitive_db_rfam_seeds.fasta.gz",
-        sha256=(
-            "29de2fd40280d6fb3832dcd69d61ab88"
-            "aa8ea90065f0bf2a30eac3de23c80145"
-        ),
+        sha256=("29de2fd40280d6fb3832dcd69d61ab88" "aa8ea90065f0bf2a30eac3de23c80145"),
     ),
 }
 DATABASE_CHOICES = tuple(_DATABASE_ASSETS)
@@ -124,8 +111,7 @@ def _download(url, destination):
     except (URLError, OSError) as error:
         reason = getattr(error, "reason", error)
         raise RuntimeError(
-            f"Unable to download the SortMeRNA database from {url}: "
-            f"{reason}."
+            f"Unable to download the SortMeRNA database from {url}: " f"{reason}."
         ) from error
 
     return digest.hexdigest()

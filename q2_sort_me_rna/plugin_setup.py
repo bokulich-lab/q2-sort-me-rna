@@ -34,7 +34,6 @@ from q2_sort_me_rna._methods import (
 )
 from q2_sort_me_rna._database import DATABASE_CHOICES, fetch_db
 
-
 citations = Citations.load("citations.bib", package="q2_sort_me_rna")
 sortmerna_citation = citations["sortmerna-2012"]
 
@@ -148,17 +147,13 @@ otu_parameters = {
     if name != "no_best"
 }
 alignment_parameter_descriptions = {
-    name: sort_me_rna_parameter_descriptions[name]
-    for name in alignment_parameters
+    name: sort_me_rna_parameter_descriptions[name] for name in alignment_parameters
 }
 otu_parameter_descriptions = {
-    name: sort_me_rna_parameter_descriptions[name]
-    for name in otu_parameters
+    name: sort_me_rna_parameter_descriptions[name] for name in otu_parameters
 }
 
-read_type = TypeMatch(
-    [SequencesWithQuality, PairedEndSequencesWithQuality]
-)
+read_type = TypeMatch([SequencesWithQuality, PairedEndSequencesWithQuality])
 common_inputs = {
     "references": FeatureData[Sequence],
     "reads": SampleData[read_type],

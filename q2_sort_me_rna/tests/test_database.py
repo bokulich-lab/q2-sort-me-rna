@@ -76,9 +76,7 @@ class FetchDatabaseTests(TestPluginBase):
             "q2_sort_me_rna._database.urlopen",
             side_effect=URLError("network unavailable"),
         ):
-            with self.assertRaisesRegex(
-                RuntimeError, "network unavailable"
-            ):
+            with self.assertRaisesRegex(RuntimeError, "network unavailable"):
                 fetch_db()
 
     def test_fetch_database_rejects_invalid_gzip(self):
@@ -92,15 +90,12 @@ class FetchDatabaseTests(TestPluginBase):
                 "q2_sort_me_rna._database.urlopen",
                 return_value=BytesIO(archive),
             ):
-                with self.assertRaisesRegex(
-                    RuntimeError, "could not be decompressed"
-                ):
+                with self.assertRaisesRegex(RuntimeError, "could not be decompressed"):
                     fetch_db()
 
     def test_fetch_database_is_registered(self):
         action = self.plugin.methods["fetch_db"]
-        self.assertEqual(action.signature.parameters["database"].default,
-                         "default")
+        self.assertEqual(action.signature.parameters["database"].default, "default")
 
         with patch.dict(_DATABASE_ASSETS, {"default": self.asset}):
             with patch(
@@ -109,6 +104,4 @@ class FetchDatabaseTests(TestPluginBase):
             ):
                 observed = action(database="default")
 
-        self.assertEqual(
-            str(observed.reference_db.type), "FeatureData[Sequence]"
-        )
+        self.assertEqual(str(observed.reference_db.type), "FeatureData[Sequence]")

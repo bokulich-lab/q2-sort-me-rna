@@ -53,15 +53,11 @@ class SortMeRNAEndToEndTests(TestPluginBase):
         ]
         subprocess.run(command, check=True)
 
-        self._assert_artifact(
-            "blast_aligned_seq.qza", "FeatureData[BLAST6]"
-        )
+        self._assert_artifact("blast_aligned_seq.qza", "FeatureData[BLAST6]")
         self._assert_artifact(
             "fastx_aligned_seq.qza", "SampleData[SequencesWithQuality]"
         )
-        self._assert_artifact(
-            "alignment_map.qza", "SampleData[AlignmentMap]"
-        )
+        self._assert_artifact("alignment_map.qza", "SampleData[AlignmentMap]")
 
     def test_sortmerna_major_version(self):
         completed = subprocess.run(
