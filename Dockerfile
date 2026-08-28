@@ -36,7 +36,7 @@ RUN conda update -qy conda \
     && mamba env create -n ${PLUGIN_NAME} --file environment.yml \
     && mamba clean --all --yes \
     && chown -R "${QIIME2_UID}:${QIIME2_GID}" "/opt/conda/envs/${PLUGIN_NAME}" \
-    && chmod -R a+rwX "/opt/conda/envs/${PLUGIN_NAME}" \
+    && chmod -R a+rwX "/opt/conda/envs/${PLUGIN_NAME}"
 
 USER ${QIIME2_USER}
 
@@ -59,6 +59,6 @@ FROM base AS prod
 # `docker run -u UID:GID` works.
 USER root
 RUN rm -rf ./plugin \
-    && chmod -R a+rwX /home/${QIIME2_USER} \
+    && chmod -R a+rwX /home/${QIIME2_USER}
 
 USER ${QIIME2_USER}
