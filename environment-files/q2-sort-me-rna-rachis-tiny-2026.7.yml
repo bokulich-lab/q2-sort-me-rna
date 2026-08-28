@@ -3,7 +3,7 @@ channels:
 - conda-forge
 - bioconda
 dependencies:
-- qiime2-tiny
-- sortmerna >=7.0.0,<8.0.0a0
-- samtools
-- pip
+  - rachis-tiny
+  - sortmerna >=7.0.0,<8.0.0a0
+  - samtools
+  - pip
