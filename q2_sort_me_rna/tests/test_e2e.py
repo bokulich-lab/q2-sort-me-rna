@@ -28,15 +28,9 @@ class SortMeRNAEndToEndTests(TestPluginBase):
 
     def setUp(self):
         super().setUp()
-        self.references = Artifact.load(
-            self.get_data_path("rrna_references.qza")
-        )
-        self.single_reads = Artifact.load(
-            self.get_data_path("raw_sequence.qza")
-        )
-        self.paired_reads = Artifact.load(
-            self.get_data_path("paired_raw_sequence.qza")
-        )
+        self.references = Artifact.load(self.get_data_path("rrna_references.qza"))
+        self.single_reads = Artifact.load(self.get_data_path("raw_sequence.qza"))
+        self.paired_reads = Artifact.load(self.get_data_path("paired_raw_sequence.qza"))
 
     def test_align_sequences(self):
         results = align_sequences(
@@ -48,16 +42,12 @@ class SortMeRNAEndToEndTests(TestPluginBase):
             max_read_len=30000,
         )
 
-        self._assert_artifact(
-            results.blast_aligned_seq, "FeatureData[BLAST6]"
-        )
+        self._assert_artifact(results.blast_aligned_seq, "FeatureData[BLAST6]")
         self._assert_artifact(
             results.fastx_aligned_seq,
             "SampleData[SequencesWithQuality]",
         )
-        self._assert_artifact(
-            results.alignment_map, "SampleData[AlignmentMap]"
-        )
+        self._assert_artifact(results.alignment_map, "SampleData[AlignmentMap]")
 
     def test_sortmerna_major_version(self):
         completed = subprocess.run(
@@ -77,9 +67,7 @@ class SortMeRNAEndToEndTests(TestPluginBase):
             coverage=0.12,
         )
 
-        self._assert_artifact(
-            results.otu_mapping, "FeatureTable[Frequency]"
-        )
+        self._assert_artifact(results.otu_mapping, "FeatureTable[Frequency]")
 
     def test_denovo_otu_mapping(self):
         results = denovo_otu_mapping(
