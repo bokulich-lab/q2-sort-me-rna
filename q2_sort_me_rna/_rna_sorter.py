@@ -22,6 +22,18 @@ from q2_types.per_sample_sequences import (
 
 from q2_sort_me_rna._utils import run_command
 
+FASTQ_EXTENSIONS = {".fq", ".fastq"}
+FASTX_EXTENSIONS = FASTQ_EXTENSIONS | {
+    ".fasta",
+    ".fas",
+    ".fa",
+    ".fna",
+    ".ffn",
+    ".faa",
+    ".mpfa",
+    ".frn",
+}
+
 
 def sort_rna(
     references,
@@ -66,8 +78,14 @@ def sort_rna(
 
 
 def _run_sort_rna(arguments):
-    arguments = arguments.copy()
     workdir = Path(arguments["workdir"])
+    reads = arguments["reads"]
+    common_arguments = {
+        name: value
+        for name, value in arguments.items()
+        if name not in {"references", "reads", "workdir"}
+    }
+    common_arguments["ref"] = str(arguments["references"])
     expected = ["blast", "fastx", "alignment_map"]
     if arguments.get("otu_map"):
         expected.append("otu_map")
@@ -76,30 +94,23 @@ def _run_sort_rna(arguments):
 
     sample_outputs = []
     for sample_number, (forward_read, reverse_read, sample_id) in enumerate(
-        _get_read_sets(arguments["reads"]), start=1
+        _get_read_sets(reads), start=1
     ):
         sample_workdir = workdir / f"sample-{sample_number:06d}"
         sample_workdir.mkdir()
-        sample_arguments = arguments.copy()
-        sample_arguments["workdir"] = str(sample_workdir)
-        sample_arguments["ref"] = str(arguments["references"])
-        del sample_arguments["references"]
-        sample_arguments["reads"] = _un_gzip_file(
-            forward_read, sample_workdir / "reads.fastq"
-        )
+        sample_arguments = {
+            **common_arguments,
+            "workdir": str(sample_workdir),
+            "reads": str(forward_read),
+        }
         if reverse_read is not None:
-            sample_arguments["reads_reverse"] = _un_gzip_file(
-                reverse_read, sample_workdir / "reads-reverse.fastq"
-            )
+            sample_arguments["reads_reverse"] = str(reverse_read)
 
         command = ["sortmerna", *_parse_parameters(sample_arguments)]
         try:
             run_command(command, capture_output=True, text=True)
         except subprocess.CalledProcessError as error:
-            detail = error.stderr or error.stdout or ""
-            if isinstance(detail, bytes):
-                detail = detail.decode(errors="replace")
-            detail = detail.strip()
+            detail = (error.stderr or error.stdout or "").strip()
             message = (
                 f"SortMeRNA failed with exit code {error.returncode} for "
                 f"sample {sample_id!r}"
@@ -153,6 +164,14 @@ def _merge_sample_outputs(sample_outputs, expected):
             outputs[name] = mapping
 
     return outputs
+
+
+def _collate_blasts(blasts: BLAST6Format) -> BLAST6Format:
+    return _merge_blast_formats(blasts)
+
+
+def _collate_alignment_maps(bams: BAMDirFmt) -> BAMDirFmt:
+    return _merge_directory_formats(bams, BAMDirFmt)
 
 
 def _merge_blast_formats(formats):
@@ -226,7 +245,7 @@ def _collect_outputs(output_dir, sample_id):
 
         if extension == ".blast":
             outputs["blast"] = _construct_blast_fmt(output_file)
-        elif _is_fastx(extension):
+        elif extension in FASTX_EXTENSIONS:
             key = "denovo" if "_denovo." in name else "fastx"
             outputs[key] = _construct_fastx_fmt(output_file, sample_id)
         elif extension == ".sam":
@@ -246,20 +265,16 @@ def _effective_extension(filename):
 
 def _construct_blast_fmt(input_path):
     blast_fmt = BLAST6Format()
-    shutil.copyfile(input_path, str(blast_fmt))
+    with gzip.open(input_path, "rb") as source:
+        with Path(str(blast_fmt)).open("wb") as target:
+            shutil.copyfileobj(source, target)
     return blast_fmt
 
 
 def _construct_fastx_fmt(input_path, sample_id):
-    input_path = Path(input_path)
-    extension = _effective_extension(input_path.name)
-    if not _is_fastq(extension):
+    extension = _effective_extension(input_path)
+    if extension not in FASTQ_EXTENSIONS:
         raise ValueError(f"Unsupported aligned sequence file type: {extension}")
-
-    if input_path.suffix != ".gz":
-        compressed_path = input_path.with_suffix(f"{input_path.suffix}.gz")
-        _gzip_file(input_path, compressed_path)
-        input_path = compressed_path
 
     fastx_fmt = CasavaOneEightSingleLanePerSampleDirFmt()
     destination = Path(str(fastx_fmt)) / f"{sample_id}_0_L001_R1_001.fastq.gz"
@@ -269,10 +284,10 @@ def _construct_fastx_fmt(input_path, sample_id):
 
 def _construct_bam_fmt(input_path, sample_id):
     input_path = Path(input_path)
-    if input_path.suffix == ".gz":
-        uncompressed_path = input_path.with_suffix("")
-        _un_gzip_file(input_path, uncompressed_path)
-        input_path = uncompressed_path
+    uncompressed_path = input_path.with_suffix("")
+    with gzip.open(input_path, "rb") as source:
+        with uncompressed_path.open("wb") as target:
+            shutil.copyfileobj(source, target)
 
     bam_fmt = BAMDirFmt()
     destination = Path(str(bam_fmt)) / f"{sample_id}.bam"
@@ -282,15 +297,12 @@ def _construct_bam_fmt(input_path, sample_id):
         "-b",
         "-o",
         str(destination),
-        str(input_path),
+        str(uncompressed_path),
     ]
     try:
         run_command(command, capture_output=True, text=True)
     except subprocess.CalledProcessError as error:
-        detail = error.stderr or error.stdout or ""
-        if isinstance(detail, bytes):
-            detail = detail.decode(errors="replace")
-        detail = detail.strip()
+        detail = (error.stderr or error.stdout or "").strip()
         message = f"samtools failed with exit code {error.returncode}"
         if detail:
             message = f"{message}: {detail}"
@@ -306,7 +318,7 @@ def _construct_otu_mapping(input_path, sample_id):
     with Path(input_path).open() as fh:
         for line_number, line in enumerate(fh, start=1):
             fields = line.rstrip("\r\n").split("\t")
-            if not fields or not fields[0]:
+            if not fields[0]:
                 raise ValueError(f"Invalid OTU map record at line {line_number}.")
             counts[fields[0]] = len(fields) - 1
 
@@ -315,64 +327,12 @@ def _construct_otu_mapping(input_path, sample_id):
     return mapping
 
 
-def _gzip_file(input_path, output_path):
-    with Path(input_path).open("rb") as input_file:
-        with gzip.open(output_path, "wb") as output_file:
-            shutil.copyfileobj(input_file, output_file)
-    return str(output_path)
-
-
-def _un_gzip_file(input_path, output_path):
-    with gzip.open(input_path, "rb") as input_file:
-        with Path(output_path).open("wb") as output_file:
-            shutil.copyfileobj(input_file, output_file)
-    return str(output_path)
-
-
-def _is_fastx(extension):
-    return _is_fastq(extension) or _is_fasta(extension)
-
-
-def _is_fastq(extension):
-    return extension in {".fq", ".fastq"}
-
-
-def _is_fasta(extension):
-    return extension in {
-        ".fasta",
-        ".fas",
-        ".fa",
-        ".fna",
-        ".ffn",
-        ".faa",
-        ".mpfa",
-        ".frn",
-    }
-
-
 def _get_read_sets(reads_artifact):
-    manifest = reads_artifact.manifest
-    if manifest.empty:
-        raise ValueError("The reads artifact does not contain a gzipped FASTQ file.")
-
-    read_sets = []
-    layouts = set()
-    for sample_id, row in manifest.sort_index().iterrows():
-        if pd.isna(row["forward"]):
-            raise ValueError(f"Sample {sample_id!r} does not contain a forward read.")
-
-        forward_read = Path(row["forward"])
-        if pd.isna(row["reverse"]):
-            reverse_read = None
-            layouts.add("single")
-        else:
-            reverse_read = Path(row["reverse"])
-            layouts.add("paired")
-        read_sets.append((forward_read, reverse_read, str(sample_id)))
-
-    if len(layouts) > 1:
-        raise ValueError(
-            "A reads artifact cannot mix single-end and paired-end samples."
+    return [
+        (
+            Path(row["forward"]),
+            None if pd.isna(row["reverse"]) else Path(row["reverse"]),
+            str(sample_id),
         )
-
-    return read_sets
+        for sample_id, row in reads_artifact.manifest.sort_index().iterrows()
+    ]

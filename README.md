@@ -4,7 +4,7 @@
 wraps [SortMeRNA](https://github.com/sortmerna/sortmerna) for filtering and
 aligning ribosomal RNA reads.
 
-The plugin provides four methods:
+The plugin provides a reference-fetching method and three analysis pipelines:
 
 - `fetch-db` downloads a prepared upstream rRNA reference database and
   returns it as `FeatureData[Sequence]`.
@@ -20,9 +20,9 @@ Create a development environment from the concise environment specification:
 
 ```shell
 conda env create \
-  -n q2-sort-me-rna-qiime2-tiny-dev \
-  --file environment-files/q2-sort-me-rna-qiime2-tiny-dev.yml
-conda activate q2-sort-me-rna-qiime2-tiny-dev
+  -n q2-sort-me-rna-rachis-tiny-dev \
+  --file environment-files/q2-sort-me-rna-rachis-tiny-2026.7.yml
+conda activate q2-sort-me-rna-rachis-tiny-dev
 make install
 qiime dev refresh-cache
 ```
@@ -78,6 +78,22 @@ qiime sort-me-rna align-sequences \
 Each action uses an isolated temporary SortMeRNA workspace and removes it after
 collecting the declared QIIME 2 results.
 
+The analysis actions are pipelines. To run their read partitions with Parsl,
+add `--parallel`:
+
+```shell
+qiime sort-me-rna align-sequences \
+  --i-reads reads.qza \
+  --i-references rrna_references.qza \
+  --output-dir output \
+  --parallel
+```
+
+The pipelines partition reads by sample by default; `--p-num-partitions` can
+group samples into fewer tasks. Executor settings determine how many tasks run
+at once; `--p-threads` sets the threads used by each SortMeRNA task. They use
+q2-fondue to combine read artifacts and q2-feature-table to merge OTU tables.
+
 ## Input processing
 
 SortMeRNA accepts one single-end file or one paired-end file pair per run. For
@@ -97,8 +113,8 @@ make test
 make lint
 ```
 
-Unit tests mock the external SortMeRNA boundary. End-to-end tests run only when
-the `sortmerna` executable is available.
+Unit tests mock the external SortMeRNA boundary. End-to-end tests require
+SortMeRNA, q2-fondue, and q2-feature-table.
 
 ## Citation
 
