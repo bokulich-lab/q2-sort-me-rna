@@ -1,0 +1,14 @@
+channels:
+- https://packages.qiime2.org/qiime2/2026.10/tiny/released
+- https://packages.qiime2.org/qiime2/2026.10/qiime2/released
+- conda-forge
+- bioconda
+dependencies:
+  - rachis-tiny
+  - sortmerna >=7.0.0,<8.0.0a0
+  - samtools
+  - q2-fondue
+  - q2-feature-table
+  - pip
+  - pip:
+      - q2-sort-me-rna@git+https://github.com/bokulich-lab/q2-sort-me-rna.git
