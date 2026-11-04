@@ -1,42 +1,38 @@
-{% set data = load_setup_py_data() %}
-{% set version = data.get('version') %}
-
-# TODO review meta.yml spec and fill in missing fields as necessary (e.g. build number).
 package:
   name: q2-sort-me-rna
-  version: {{ version }}
-
+  version: {{ PLUGIN_VERSION }}
 source:
-  path: ../..
-
+  path: ..
 build:
   script: make install
-
 requirements:
   host:
-    - python {{ python }}
-    - setuptools
-
+  - python {{ python }}
+  - pip
+  - setuptools
+  - versioningit
+  - wheel
   run:
-    - python {{ python }}
-    - setuptools
-    - jinja2
-    - pandas {{ pandas }}
-
+  - python {{ python }}
+  - sortmerna >=7.0.0,<8.0.0a0
+  - samtools
+  - qiime2 >={{ qiime2 }}
+  - q2-types >={{ q2_types }}
+  - q2templates >={{ q2templates }}
+  build:
+  - python {{ python }}
+  - setuptools
+  - versioningit
 test:
   requires:
-    - pytest
-    - qiime2 >={{ qiime2 }}
-    - q2-types >={{ q2_types }}
-
+  - parameterized
+  - pytest-xdist
   imports:
-    - q2_sort_me_rna
-    - qiime2.plugins.sort_me_rna  
-
+  - q2_sort_me_rna
+  - qiime2.plugins.sort_me_rna
   commands:
-    - py.test --pyargs q2_sort_me_rna
-
+  - pytest --pyargs q2_sort_me_rna -n 4
 about:
-  home: https://qiime2.org
+  home: https://github.com/bokulich-lab/q2-sort-me-rna
   license: BSD-3-Clause
   license_family: BSD

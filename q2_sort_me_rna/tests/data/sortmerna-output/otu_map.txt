@@ -1,0 +1,1 @@
+ref1	read1	read2
