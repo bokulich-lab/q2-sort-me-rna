@@ -7,6 +7,7 @@
 # ----------------------------------------------------------------------------
 
 import base64
+import gzip
 import inspect
 from pathlib import Path
 import shutil
@@ -25,9 +26,14 @@ from q2_types.per_sample_sequences import (
 )
 
 from q2_sort_me_rna._methods import (
-    align_sequences,
-    denovo_otu_mapping,
-    otu_mapping,
+    _align_sequences as align_sequences,
+    _denovo_otu_mapping as denovo_otu_mapping,
+    _otu_mapping as otu_mapping,
+)
+from q2_sort_me_rna._parallel import (
+    align_sequences as parallel_align_sequences,
+    denovo_otu_mapping as parallel_denovo_otu_mapping,
+    otu_mapping as parallel_otu_mapping,
 )
 from q2_sort_me_rna._rna_sorter import _get_read_sets, _parse_parameters
 
@@ -70,6 +76,15 @@ class SortMeRNAMethodTests(TestPluginBase):
                 shutil.copyfile(source_read, destination)
         self.mock_output_dir = Path(self.get_data_path("sortmerna-output"))
 
+    def _get_workdir(self, command):
+        return Path(
+            next(
+                arg.removeprefix("--workdir=")
+                for arg in command
+                if arg.startswith("--workdir=")
+            )
+        )
+
     def _mock_sortmerna(self, command, **kwargs):
         if command[0] == "samtools":
             destination = Path(command[command.index("-o") + 1])
@@ -77,22 +92,26 @@ class SortMeRNAMethodTests(TestPluginBase):
             destination.write_bytes(base64.b64decode(encoded_bam))
             return subprocess.CompletedProcess(command, returncode=0)
 
-        workdir = Path(command[command.index("--workdir") + 1])
+        workdir = self._get_workdir(command)
         output_dir = workdir / "out"
         output_dir.mkdir(parents=True)
 
         for filename in ("aligned.blast", "aligned.fastq", "aligned.sam"):
-            shutil.copyfile(self.mock_output_dir / filename, output_dir / filename)
+            source = self.mock_output_dir / filename
+            (output_dir / f"{filename}.gz").write_bytes(
+                gzip.compress(source.read_bytes())
+            )
 
-        if "--otu_map" in command:
+        if "--otu-map" in command:
             shutil.copyfile(
                 self.mock_output_dir / "otu_map.txt",
                 output_dir / "otu_map.txt",
             )
-        if "--de_novo_otu" in command:
-            shutil.copyfile(
-                self.mock_output_dir / "aligned_denovo.fastq",
-                output_dir / "aligned_denovo.fastq",
+        if "--de-novo-otu" in command:
+            (output_dir / "aligned_denovo.fastq.gz").write_bytes(
+                gzip.compress(
+                    (self.mock_output_dir / "aligned_denovo.fastq").read_bytes()
+                )
             )
 
         return subprocess.CompletedProcess(command, returncode=0)
@@ -120,19 +139,19 @@ class SortMeRNAMethodTests(TestPluginBase):
         commands = [call.args[0] for call in mock_run.call_args_list]
         command = next(command for command in commands if command[0] == "sortmerna")
         self.assertEqual(command[0], "sortmerna")
-        self.assertIn("--ref", command)
-        self.assertIn("--reads", command)
+        self.assertIn(f"--ref={self.reference}", command)
+        self.assertIn(f"--reads={_get_read_sets(self.single_reads)[0][0]}", command)
         self.assertIn("--fastx", command)
         self.assertIn("--sam", command)
         self.assertIn("--SQ", command)
         self.assertIn("--no-best", command)
-        self.assertIn("--score_split", command)
+        self.assertIn("--score-split", command)
         self.assertNotIn("True", command)
         self.assertNotIn("--best", command)
-        self.assertEqual(command[command.index("--num_alignments") + 1], "2")
-        self.assertEqual(command[command.index("--max_read_len") + 1], "40000")
-        self.assertEqual(command[command.index("--threads") + 1], "2")
-        temporary_workdir = Path(command[command.index("--workdir") + 1])
+        self.assertIn("--num-alignments=2", command)
+        self.assertIn("--max-read-len=40000", command)
+        self.assertIn("--threads=2", command)
+        temporary_workdir = self._get_workdir(command)
         self.assertFalse(temporary_workdir.exists())
 
     def test_otu_mapping_success(self):
@@ -146,6 +165,22 @@ class SortMeRNAMethodTests(TestPluginBase):
             {"ref1": [2]}, index=pd.Index(["raw"], name="sample-id")
         )
         pdt.assert_frame_equal(observed[3], expected)
+
+    def test_paired_reads_are_passed_to_sortmerna_compressed(self):
+        with patch(
+            "q2_sort_me_rna._rna_sorter.run_command",
+            side_effect=self._mock_sortmerna,
+        ) as mock_run:
+            align_sequences(self.reference, self.paired_reads)
+
+        command = next(
+            call.args[0]
+            for call in mock_run.call_args_list
+            if call.args[0][0] == "sortmerna"
+        )
+        reads = [arg.split("=", 1)[1] for arg in command if arg.startswith("--reads=")]
+        forward, reverse, _ = _get_read_sets(self.paired_reads)[0]
+        self.assertEqual(reads, [str(forward), str(reverse)])
 
     def test_multi_sample_outputs_are_merged(self):
         with patch(
@@ -209,7 +244,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             if command[0] == "sortmerna":
                 sortmerna_calls += 1
                 if sortmerna_calls == 2:
-                    workdir = Path(command[command.index("--workdir") + 1])
+                    workdir = self._get_workdir(command)
                     (workdir / "out" / "otu_map.txt").write_text("")
             return result
 
@@ -283,22 +318,21 @@ class SortMeRNAMethodTests(TestPluginBase):
         self.assertEqual(
             observed,
             [
-                "--ref",
-                "/tmp/reference with spaces.fasta",
+                "--ref=/tmp/reference with spaces.fasta",
                 "--fastx",
-                "--threads",
-                "0",
+                "--threads=0",
             ],
         )
 
-    def test_parameter_parsing_uses_sortmerna_v7_option_names(self):
+    def test_parameter_parsing_uses_sortmerna_v8_options(self):
         observed = _parse_parameters(
             {
                 "no_best": True,
                 "score_split": True,
                 "max_read_len": 1000,
                 "f": True,
-                "n": -4,
+                "n": -10,
+                "mismatch": -12,
                 "r": True,
             }
         )
@@ -306,12 +340,11 @@ class SortMeRNAMethodTests(TestPluginBase):
             observed,
             [
                 "--no-best",
-                "--score_split",
-                "--max_read_len",
-                "1000",
+                "--score-split",
+                "--max-read-len=1000",
                 "-F",
-                "-N",
-                "-4",
+                "-N=-10",
+                "--mismatch=-12",
                 "-R",
             ],
         )
@@ -325,7 +358,7 @@ class SortMeRNAMethodTests(TestPluginBase):
                 "threads": 1,
             }
         )
-        self.assertEqual(observed, ["--match", "2", "--threads", "1"])
+        self.assertEqual(observed, ["--match=2", "--threads=1"])
 
     def test_parameter_parsing_rejects_two_custom_alignment_limits(self):
         with self.assertRaisesRegex(
@@ -362,11 +395,17 @@ class SortMeRNAMethodTests(TestPluginBase):
 
     def test_actions_are_registered(self):
         self.assertIn("fetch_db", self.plugin.methods)
-        self.assertIn("align_sequences", self.plugin.methods)
-        self.assertIn("otu_mapping", self.plugin.methods)
-        self.assertIn("denovo_otu_mapping", self.plugin.methods)
+        self.assertIn("_align_sequences", self.plugin.methods)
+        self.assertIn("_otu_mapping", self.plugin.methods)
+        self.assertIn("_denovo_otu_mapping", self.plugin.methods)
+        for name in (
+            "align_sequences",
+            "otu_mapping",
+            "denovo_otu_mapping",
+        ):
+            self.assertIn(name, self.plugin.pipelines)
 
-        signature = self.plugin.methods["align_sequences"].signature
+        signature = self.plugin.pipelines["align_sequences"].signature
         self.assertIn("references", signature.inputs)
         self.assertNotIn("ref", signature.inputs)
         parameters = signature.parameters
@@ -383,7 +422,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             "otu_mapping",
             "denovo_otu_mapping",
         ):
-            action_signature = self.plugin.methods[action_name].signature
+            action_signature = self.plugin.pipelines[action_name].signature
             self.assertIn("references", action_signature.inputs)
             self.assertNotIn("ref", action_signature.inputs)
             action_parameters = action_signature.parameters
@@ -417,7 +456,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             ):
                 self.assertNotIn(name, action_parameters)
 
-        otu_parameters = self.plugin.methods["otu_mapping"].signature.parameters
+        otu_parameters = self.plugin.pipelines["otu_mapping"].signature.parameters
         self.assertNotIn("no_best", otu_parameters)
 
     def test_method_defaults_match_sortmerna(self):
@@ -464,15 +503,26 @@ class SortMeRNAMethodTests(TestPluginBase):
                 expected.pop("no_best")
 
             method_parameters = inspect.signature(method).parameters
-            action_parameters = self.plugin.methods[action_name].signature.parameters
+            action_parameters = self.plugin.pipelines[action_name].signature.parameters
             for name, value in expected.items():
                 self.assertEqual(method_parameters[name].default, value)
                 self.assertEqual(action_parameters[name].default, value)
 
             self.assertEqual(action_parameters["threads"].default, 1)
 
+    def test_parallel_pipelines_match_method_defaults(self):
+        for method, pipeline in (
+            (align_sequences, parallel_align_sequences),
+            (otu_mapping, parallel_otu_mapping),
+            (denovo_otu_mapping, parallel_denovo_otu_mapping),
+        ):
+            method_parameters = inspect.signature(method).parameters
+            pipeline_parameters = inspect.signature(pipeline).parameters
+            for name, parameter in method_parameters.items():
+                self.assertEqual(pipeline_parameters[name].default, parameter.default)
+
     def test_registered_action_materializes_artifacts(self):
-        action = self.plugin.methods["align_sequences"]
+        action = self.plugin.methods["_align_sequences"]
         with patch(
             "q2_sort_me_rna._rna_sorter.run_command",
             side_effect=self._mock_sortmerna,
@@ -484,16 +534,17 @@ class SortMeRNAMethodTests(TestPluginBase):
 
         commands = [call.args[0] for call in mock_run.call_args_list]
         command = next(command for command in commands if command[0] == "sortmerna")
-        self.assertEqual(command[command.index("--threads") + 1], "1")
-        for option in ("--num_alignments", "--min_lis"):
-            self.assertNotIn(option, command)
-        for option, value in (
-            ("--match", "2"),
-            ("--mismatch", "-3"),
-            ("--passes", "18,9,3"),
-            ("--max_pos", "10000"),
+        option_names = [arg.split("=", 1)[0] for arg in command]
+        for option in ("--num-alignments", "--min-lis"):
+            self.assertNotIn(option, option_names)
+        for argument in (
+            "--threads=1",
+            "--match=2",
+            "--mismatch=-3",
+            "--passes=18,9,3",
+            "--max-pos=10000",
         ):
-            self.assertEqual(command[command.index(option) + 1], value)
+            self.assertIn(argument, command)
 
         self.assertEqual(str(observed.blast_aligned_seq.type), "FeatureData[BLAST6]")
         self.assertEqual(

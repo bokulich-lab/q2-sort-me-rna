@@ -12,6 +12,7 @@ from qiime2.plugin import (
     Citations,
     Float,
     Int,
+    List,
     Plugin,
     Range,
     Str,
@@ -28,11 +29,20 @@ from q2_types.sample_data import SampleData
 
 from q2_sort_me_rna import __version__
 from q2_sort_me_rna._methods import (
+    _align_sequences,
+    _denovo_otu_mapping,
+    _otu_mapping,
+)
+from q2_sort_me_rna._database import DATABASE_CHOICES, fetch_db
+from q2_sort_me_rna._parallel import (
     align_sequences,
     denovo_otu_mapping,
     otu_mapping,
 )
-from q2_sort_me_rna._database import DATABASE_CHOICES, fetch_db
+from q2_sort_me_rna._rna_sorter import (
+    _collate_alignment_maps,
+    _collate_blasts,
+)
 
 citations = Citations.load("citations.bib", package="q2_sort_me_rna")
 sortmerna_citation = citations["sortmerna-2012"]
@@ -57,9 +67,6 @@ proportion = Float % Range(0, 1, inclusive_end=True)
 edge_count = Int % Range(1, 11)
 seed_length = Int % Range(8, 27)
 
-# These v7 options change data represented by the actions' declared outputs.
-# Filesystem, serialization, indexing-task, and developer controls are owned
-# by the wrapper and are intentionally absent from the QIIME 2 interface.
 sort_me_rna_parameters = {
     "num_alignments": nonnegative_int,
     "no_best": Bool,
@@ -130,10 +137,7 @@ sort_me_rna_parameter_descriptions = {
     "l": "Reference-index seed length; must be an even integer.",
     "m": "Reference-index memory limit.",
     "interval": "Reference-index seed interval.",
-    "max_pos": (
-        "Maximum reference positions stored per seed. SortMeRNA v7.0.0 uses "
-        "10000 at runtime despite displaying 1000 in its help text."
-    ),
+    "max_pos": "Maximum reference positions stored per seed.",
 }
 
 alignment_parameters = {
@@ -203,7 +207,7 @@ plugin.methods.register_function(
 )
 
 plugin.methods.register_function(
-    function=align_sequences,
+    function=_align_sequences,
     inputs=common_inputs,
     parameters=alignment_parameters,
     outputs=[
@@ -223,7 +227,7 @@ plugin.methods.register_function(
 )
 
 plugin.methods.register_function(
-    function=otu_mapping,
+    function=_otu_mapping,
     inputs=common_inputs,
     parameters=otu_parameters,
     outputs=[
@@ -247,7 +251,7 @@ plugin.methods.register_function(
 )
 
 plugin.methods.register_function(
-    function=denovo_otu_mapping,
+    function=_denovo_otu_mapping,
     inputs=common_inputs,
     parameters=otu_parameters,
     outputs=[
@@ -271,3 +275,94 @@ plugin.methods.register_function(
     ),
     citations=[sortmerna_citation],
 )
+
+plugin.methods.register_function(
+    function=_collate_blasts,
+    inputs={"blasts": List[FeatureData[BLAST6]]},
+    parameters={},
+    outputs=[("blast_aligned_seq", FeatureData[BLAST6])],
+    input_descriptions={"blasts": "Per-partition BLAST results."},
+    parameter_descriptions={},
+    output_descriptions={"blast_aligned_seq": "Combined BLAST alignments."},
+    name="Collate SortMeRNA BLAST results",
+    description="Combine BLAST results from independent read partitions.",
+)
+
+plugin.methods.register_function(
+    function=_collate_alignment_maps,
+    inputs={"bams": List[SampleData[AlignmentMap]]},
+    parameters={},
+    outputs=[("alignment_map", SampleData[AlignmentMap])],
+    input_descriptions={"bams": "Per-partition BAM alignment maps."},
+    parameter_descriptions={},
+    output_descriptions={"alignment_map": "Combined BAM alignment maps."},
+    name="Collate SortMeRNA alignment maps",
+    description="Combine BAM alignment maps from independent read partitions.",
+)
+
+parallel_parameters = {"num_partitions": positive_int}
+parallel_parameter_descriptions = {
+    "num_partitions": "Number of partitions. Defaults to one partition per sample."
+}
+
+for function, parameters, outputs, output_descriptions in (
+    (
+        align_sequences,
+        alignment_parameters,
+        [
+            ("blast_aligned_seq", FeatureData[BLAST6]),
+            ("fastx_aligned_seq", SampleData[SequencesWithQuality]),
+            ("alignment_map", SampleData[AlignmentMap]),
+        ],
+        common_output_descriptions,
+    ),
+    (
+        otu_mapping,
+        otu_parameters,
+        [
+            ("blast_aligned_seq", FeatureData[BLAST6]),
+            ("fastx_aligned_seq", SampleData[SequencesWithQuality]),
+            ("alignment_map", SampleData[AlignmentMap]),
+            ("otu_mapping", FeatureTable[Frequency]),
+        ],
+        {
+            **common_output_descriptions,
+            "otu_mapping": "Counts of reads assigned to each reference sequence.",
+        },
+    ),
+    (
+        denovo_otu_mapping,
+        otu_parameters,
+        [
+            ("blast_aligned_seq", FeatureData[BLAST6]),
+            ("fastx_aligned_seq", SampleData[SequencesWithQuality]),
+            ("alignment_map", SampleData[AlignmentMap]),
+            ("otu_mapping", FeatureTable[Frequency]),
+            ("denovo_aligned_seq", SampleData[SequencesWithQuality]),
+        ],
+        {
+            **common_output_descriptions,
+            "otu_mapping": "Counts of reads assigned to each reference sequence.",
+            "denovo_aligned_seq": "Reads assigned during de novo OTU mapping.",
+        },
+    ),
+):
+    plugin.pipelines.register_function(
+        function=function,
+        inputs=common_inputs,
+        parameters={**parameters, **parallel_parameters},
+        outputs=outputs,
+        input_descriptions=common_input_descriptions,
+        parameter_descriptions={
+            **{name: sort_me_rna_parameter_descriptions[name] for name in parameters},
+            **parallel_parameter_descriptions,
+        },
+        output_descriptions=output_descriptions,
+        name=function.__name__.replace("_", " ").capitalize(),
+        description=(
+            "Run SortMeRNA on independent read partitions and combine the "
+            "results. Use QIIME 2 parallel execution to schedule partitions "
+            "with Parsl."
+        ),
+        citations=[sortmerna_citation],
+    )
