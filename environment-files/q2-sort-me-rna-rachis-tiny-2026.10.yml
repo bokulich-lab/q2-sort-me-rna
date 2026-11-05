@@ -5,7 +5,7 @@ channels:
 - bioconda
 dependencies:
   - rachis-tiny
-  - sortmerna >=7.0.0,<8.0.0a0
+  - sortmerna >=8.0.1,<9.0.0a0
   - samtools
   - q2-fondue
   - q2-feature-table

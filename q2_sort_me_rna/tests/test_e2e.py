@@ -9,6 +9,7 @@
 from collections import Counter
 import gzip
 import importlib.util
+import re
 import shutil
 import subprocess
 import unittest
@@ -98,7 +99,7 @@ class SortMeRNAEndToEndTests(TestPluginBase):
             {"raw.bam": expected_assignments},
         )
 
-    def test_sortmerna_major_version(self):
+    def test_sortmerna_supported_version(self):
         completed = subprocess.run(
             ["sortmerna", "--version"],
             check=True,
@@ -106,7 +107,11 @@ class SortMeRNAEndToEndTests(TestPluginBase):
             text=True,
         )
         version_output = completed.stdout + completed.stderr
-        self.assertRegex(version_output, r"SortMeRNA version 7\.")
+        match = re.search(r"SortMeRNA version (\d+)\.(\d+)\.(\d+)", version_output)
+        self.assertIsNotNone(match, version_output)
+        version = tuple(map(int, match.groups()))
+        self.assertGreaterEqual(version, (8, 0, 1))
+        self.assertLess(version, (9, 0, 0))
 
     def test_otu_mapping(self):
         results = otu_mapping(

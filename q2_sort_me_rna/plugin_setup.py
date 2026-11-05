@@ -67,9 +67,6 @@ proportion = Float % Range(0, 1, inclusive_end=True)
 edge_count = Int % Range(1, 11)
 seed_length = Int % Range(8, 27)
 
-# These v7 options change data represented by the actions' declared outputs.
-# Filesystem, serialization, indexing-task, and developer controls are owned
-# by the wrapper and are intentionally absent from the QIIME 2 interface.
 sort_me_rna_parameters = {
     "num_alignments": nonnegative_int,
     "no_best": Bool,
@@ -140,10 +137,7 @@ sort_me_rna_parameter_descriptions = {
     "l": "Reference-index seed length; must be an even integer.",
     "m": "Reference-index memory limit.",
     "interval": "Reference-index seed interval.",
-    "max_pos": (
-        "Maximum reference positions stored per seed. SortMeRNA v7.0.0 uses "
-        "10000 at runtime despite displaying 1000 in its help text."
-    ),
+    "max_pos": "Maximum reference positions stored per seed.",
 }
 
 alignment_parameters = {

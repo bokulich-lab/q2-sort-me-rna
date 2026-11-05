@@ -76,6 +76,15 @@ class SortMeRNAMethodTests(TestPluginBase):
                 shutil.copyfile(source_read, destination)
         self.mock_output_dir = Path(self.get_data_path("sortmerna-output"))
 
+    def _get_workdir(self, command):
+        return Path(
+            next(
+                arg.removeprefix("--workdir=")
+                for arg in command
+                if arg.startswith("--workdir=")
+            )
+        )
+
     def _mock_sortmerna(self, command, **kwargs):
         if command[0] == "samtools":
             destination = Path(command[command.index("-o") + 1])
@@ -83,7 +92,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             destination.write_bytes(base64.b64decode(encoded_bam))
             return subprocess.CompletedProcess(command, returncode=0)
 
-        workdir = Path(command[command.index("--workdir") + 1])
+        workdir = self._get_workdir(command)
         output_dir = workdir / "out"
         output_dir.mkdir(parents=True)
 
@@ -93,12 +102,12 @@ class SortMeRNAMethodTests(TestPluginBase):
                 gzip.compress(source.read_bytes())
             )
 
-        if "--otu_map" in command:
+        if "--otu-map" in command:
             shutil.copyfile(
                 self.mock_output_dir / "otu_map.txt",
                 output_dir / "otu_map.txt",
             )
-        if "--de_novo_otu" in command:
+        if "--de-novo-otu" in command:
             (output_dir / "aligned_denovo.fastq.gz").write_bytes(
                 gzip.compress(
                     (self.mock_output_dir / "aligned_denovo.fastq").read_bytes()
@@ -130,23 +139,19 @@ class SortMeRNAMethodTests(TestPluginBase):
         commands = [call.args[0] for call in mock_run.call_args_list]
         command = next(command for command in commands if command[0] == "sortmerna")
         self.assertEqual(command[0], "sortmerna")
-        self.assertIn("--ref", command)
-        self.assertIn("--reads", command)
-        self.assertEqual(
-            command[command.index("--reads") + 1],
-            str(_get_read_sets(self.single_reads)[0][0]),
-        )
+        self.assertIn(f"--ref={self.reference}", command)
+        self.assertIn(f"--reads={_get_read_sets(self.single_reads)[0][0]}", command)
         self.assertIn("--fastx", command)
         self.assertIn("--sam", command)
         self.assertIn("--SQ", command)
         self.assertIn("--no-best", command)
-        self.assertIn("--score_split", command)
+        self.assertIn("--score-split", command)
         self.assertNotIn("True", command)
         self.assertNotIn("--best", command)
-        self.assertEqual(command[command.index("--num_alignments") + 1], "2")
-        self.assertEqual(command[command.index("--max_read_len") + 1], "40000")
-        self.assertEqual(command[command.index("--threads") + 1], "2")
-        temporary_workdir = Path(command[command.index("--workdir") + 1])
+        self.assertIn("--num-alignments=2", command)
+        self.assertIn("--max-read-len=40000", command)
+        self.assertIn("--threads=2", command)
+        temporary_workdir = self._get_workdir(command)
         self.assertFalse(temporary_workdir.exists())
 
     def test_otu_mapping_success(self):
@@ -173,9 +178,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             for call in mock_run.call_args_list
             if call.args[0][0] == "sortmerna"
         )
-        reads = [
-            command[index + 1] for index, arg in enumerate(command) if arg == "--reads"
-        ]
+        reads = [arg.split("=", 1)[1] for arg in command if arg.startswith("--reads=")]
         forward, reverse, _ = _get_read_sets(self.paired_reads)[0]
         self.assertEqual(reads, [str(forward), str(reverse)])
 
@@ -241,7 +244,7 @@ class SortMeRNAMethodTests(TestPluginBase):
             if command[0] == "sortmerna":
                 sortmerna_calls += 1
                 if sortmerna_calls == 2:
-                    workdir = Path(command[command.index("--workdir") + 1])
+                    workdir = self._get_workdir(command)
                     (workdir / "out" / "otu_map.txt").write_text("")
             return result
 
@@ -315,22 +318,21 @@ class SortMeRNAMethodTests(TestPluginBase):
         self.assertEqual(
             observed,
             [
-                "--ref",
-                "/tmp/reference with spaces.fasta",
+                "--ref=/tmp/reference with spaces.fasta",
                 "--fastx",
-                "--threads",
-                "0",
+                "--threads=0",
             ],
         )
 
-    def test_parameter_parsing_uses_sortmerna_v7_option_names(self):
+    def test_parameter_parsing_uses_sortmerna_v8_options(self):
         observed = _parse_parameters(
             {
                 "no_best": True,
                 "score_split": True,
                 "max_read_len": 1000,
                 "f": True,
-                "n": -4,
+                "n": -10,
+                "mismatch": -12,
                 "r": True,
             }
         )
@@ -338,12 +340,11 @@ class SortMeRNAMethodTests(TestPluginBase):
             observed,
             [
                 "--no-best",
-                "--score_split",
-                "--max_read_len",
-                "1000",
+                "--score-split",
+                "--max-read-len=1000",
                 "-F",
-                "-N",
-                "-4",
+                "-N=-10",
+                "--mismatch=-12",
                 "-R",
             ],
         )
@@ -357,7 +358,7 @@ class SortMeRNAMethodTests(TestPluginBase):
                 "threads": 1,
             }
         )
-        self.assertEqual(observed, ["--match", "2", "--threads", "1"])
+        self.assertEqual(observed, ["--match=2", "--threads=1"])
 
     def test_parameter_parsing_rejects_two_custom_alignment_limits(self):
         with self.assertRaisesRegex(
@@ -533,16 +534,17 @@ class SortMeRNAMethodTests(TestPluginBase):
 
         commands = [call.args[0] for call in mock_run.call_args_list]
         command = next(command for command in commands if command[0] == "sortmerna")
-        self.assertEqual(command[command.index("--threads") + 1], "1")
-        for option in ("--num_alignments", "--min_lis"):
-            self.assertNotIn(option, command)
-        for option, value in (
-            ("--match", "2"),
-            ("--mismatch", "-3"),
-            ("--passes", "18,9,3"),
-            ("--max_pos", "10000"),
+        option_names = [arg.split("=", 1)[0] for arg in command]
+        for option in ("--num-alignments", "--min-lis"):
+            self.assertNotIn(option, option_names)
+        for argument in (
+            "--threads=1",
+            "--match=2",
+            "--mismatch=-3",
+            "--passes=18,9,3",
+            "--max-pos=10000",
         ):
-            self.assertEqual(command[command.index(option) + 1], value)
+            self.assertIn(argument, command)
 
         self.assertEqual(str(observed.blast_aligned_seq.type), "FeatureData[BLAST6]")
         self.assertEqual(

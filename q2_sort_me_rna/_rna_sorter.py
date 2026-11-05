@@ -201,23 +201,22 @@ def _parse_parameters(arguments):
     arguments = arguments.copy()
     _resolve_alignment_limit(arguments)
     uppercase_args = {"sq", "f", "n", "r", "l"}
-    hyphenated_args = {"no_best"}
     duplicate_args = {"reads_reverse": "reads"}
     parameters = []
 
     for name, value in arguments.items():
         if value is None or value is False:
             continue
-        name = duplicate_args.get(name, name)
-        if name in hyphenated_args:
-            name = name.replace("_", "-")
+        name = duplicate_args.get(name, name).replace("_", "-")
         if name in uppercase_args:
             name = name.upper()
 
         prefix = "-" if len(name) == 1 else "--"
-        parameters.append(f"{prefix}{name}")
+        option = f"{prefix}{name}"
+        # A separate value like -10 is interpreted as a flag by SortMeRNA 8.
         if value is not True:
-            parameters.append(str(value))
+            option = f"{option}={value}"
+        parameters.append(option)
 
     return parameters
 

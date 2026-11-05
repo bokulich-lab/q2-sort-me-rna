@@ -56,14 +56,14 @@ so the result is a standard QIIME 2 `FeatureData[Sequence]` artifact accepted
 directly by this plugin's alignment actions. FASTA identifiers and descriptions
 are left unchanged.
 
-The environment requires SortMeRNA 7.x. The plugin exposes alignment and
-scoring controls that change data represented by the declared QIIME 2 outputs.
-Their defaults match SortMeRNA 7.0.0, except that QIIME actions intentionally
-default to one processing thread.
+The environment requires SortMeRNA 8.0.1 or a later 8.x release. The plugin
+exposes alignment and scoring controls that change data represented by the
+declared QIIME 2 outputs.
+QIIME actions default to one processing thread per SortMeRNA invocation.
 Filesystem paths, caches, compression, execution phases, and output switches
 are managed by the wrapper so an action cannot omit or redirect a required
 result. SortMeRNA's `no-best` mode is excluded from the two OTU actions because
-v7 declares it incompatible with OTU-map generation.
+SortMeRNA requires best-alignment search for OTU-map generation.
 
 ## Example
 
