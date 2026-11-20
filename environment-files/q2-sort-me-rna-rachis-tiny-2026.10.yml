@@ -11,4 +11,4 @@ dependencies:
   - q2-feature-table
   - pip
   - pip:
-      - q2-sort-me-rna@git+https://github.com/bokulich-lab/q2-sort-me-rna.git
+      - q2-sort-me-rna@git+https://github.com/bokulich-lab/q2-sort-me-rna.git@2026.10.0
