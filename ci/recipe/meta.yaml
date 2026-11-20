@@ -14,10 +14,12 @@ requirements:
   - wheel
   run:
   - python {{ python }}
-  - sortmerna >=7.0.0,<8.0.0a0
+  - sortmerna >=8.0.1,<9.0.0a0
   - samtools
   - qiime2 >={{ qiime2 }}
   - q2-types >={{ q2_types }}
+  - q2-fondue
+  - q2-feature-table
   - q2templates >={{ q2templates }}
   build:
   - python {{ python }}

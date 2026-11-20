@@ -17,7 +17,7 @@ from q2_types.per_sample_sequences import (
 from q2_sort_me_rna._rna_sorter import sort_rna
 
 
-def align_sequences(
+def _align_sequences(
     references: DNAFASTAFormat,
     reads: CasavaOneEightSingleLanePerSampleDirFmt,
     num_alignments: int = 1,
@@ -53,7 +53,7 @@ def align_sequences(
     return sort_rna(blast="1", fastx=True, sam=True, sq=True, **arguments)
 
 
-def otu_mapping(
+def _otu_mapping(
     references: DNAFASTAFormat,
     reads: CasavaOneEightSingleLanePerSampleDirFmt,
     num_alignments: int = 1,
@@ -91,7 +91,7 @@ def otu_mapping(
     return sort_rna(blast="1", fastx=True, sam=True, sq=True, otu_map=True, **arguments)
 
 
-def denovo_otu_mapping(
+def _denovo_otu_mapping(
     references: DNAFASTAFormat,
     reads: CasavaOneEightSingleLanePerSampleDirFmt,
     num_alignments: int = 1,
